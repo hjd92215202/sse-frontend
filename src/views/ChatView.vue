@@ -1,38 +1,37 @@
 <template>
   <div class="max-w-5xl mx-auto flex flex-col h-full">
-    <!-- 头部搜索 -->
-    <div class="bg-white p-6 rounded-xl shadow-sm mb-6">
-      <a-input-search
-        v-model="query"
-        placeholder="输入业务问题，例如：结算平台 A公司"
-        button-text="提问"
-        size="large"
-        :loading="loading"
-        @search="onSearch"
-      />
-      <div class="mt-2 text-xs text-gray-400">
-        已支持实体：结算平台、运营平台 (基于 FST 毫秒级匹配)
-      </div>
+    <div class="bg-white p-6 rounded-xl shadow-sm mb-6 border-b-4 border-blue-500">
+      <a-input-search v-model="query" placeholder="输入问题，例如：查询结算平台 A公司的 总收益" button-text="语义提问" size="large"
+        :loading="loading" @search="onSearch" />
     </div>
 
-    <!-- 结果展示区 -->
     <div v-if="result" class="flex-1 overflow-auto space-y-6">
-      <!-- 语义推断信息 -->
-      <a-alert type="success" title="推断结果">
-        系统识别到维度 <b>{{ result.matched_entity }}</b>，
-        正在从 <b>{{ result.query_info?.source }}</b> 的表 <b>{{ result.query_info?.table }}</b> 检索数据。
-      </a-alert>
+      <div class="flex gap-4">
+        <a-statistic title="匹配实体">
+          <!-- 使用插槽代替 value 属性 -->
+          <span class="text-lg font-bold text-blue-600">
+            {{ result.matched_metrics?.join(', ') || '明细' }}
+          </span>
+        </a-statistic>
 
-      <!-- 数据表格 -->
+        <a-statistic title="执行逻辑">
+          <span class="text-lg font-bold text-orange-600">
+            {{ result.logic === 'SUM' ? '求和聚合' : '明细列表' }}
+          </span>
+        </a-statistic>
+      </div>
+
+      <a-collapse :default-active-key="['sql']">
+        <a-collapse-item header="查看生成的推理 SQL" key="sql">
+          <pre class="bg-gray-800 text-green-400 p-4 rounded-lg text-xs overflow-x-auto">{{ result.sql }}</pre>
+        </a-collapse-item>
+      </a-collapse>
+
       <div class="bg-white rounded-xl shadow-sm p-4">
-        <a-table :data="result.data" :pagination="false">
+        <a-table :data="result.data" :pagination="{ pageSize: 5 }">
           <template #columns>
-            <a-table-column 
-              v-for="key in Object.keys(result.data[0] || {})" 
-              :key="key" 
-              :title="key" 
-              :data-index="key" 
-            />
+            <a-table-column v-for="key in Object.keys(result.data[0] || {})" :key="key" :title="key"
+              :data-index="key" />
           </template>
         </a-table>
       </div>
@@ -57,10 +56,10 @@ const onSearch = async () => {
     if (res.data.status === 'success') {
       result.value = res.data;
     } else {
-      Message.warning(res.data.answer || '未能识别意图');
+      Message.warning(res.data.answer || '未能匹配到本体节点');
     }
   } catch (e) {
-    Message.error('查询失败，请检查后端连接');
+    Message.error('服务异常');
   } finally {
     loading.value = false;
   }
