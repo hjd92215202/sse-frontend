@@ -1,40 +1,43 @@
 <template>
   <div class="max-w-5xl mx-auto flex flex-col h-full">
-    <div class="bg-white p-6 rounded-xl shadow-sm mb-6 border-b-4 border-blue-500">
-      <a-input-search v-model="query" placeholder="输入问题，例如：查询结算平台 A公司的 总收益" button-text="语义提问" size="large"
+    <div class="bg-white p-6 rounded-xl shadow-sm mb-6 border-b-4 border-blue-600">
+      <a-input-search v-model="query" placeholder="例如：查询结算平台的收益总额 (支持识别码值和语义约束)" button-text="语义提问" size="large"
         :loading="loading" @search="onSearch" />
     </div>
 
-    <div v-if="result" class="flex-1 overflow-auto space-y-6">
-      <div class="flex gap-4">
-        <a-statistic title="匹配实体">
-          <!-- 使用插槽代替 value 属性 -->
-          <span class="text-lg font-bold text-blue-600">
-            {{ result.matched_metrics?.join(', ') || '明细' }}
-          </span>
-        </a-statistic>
+    <div v-if="result" class="flex-1 overflow-auto space-y-4">
+      <!-- 情况 1：语义歧义/冲突 -->
+      <a-alert v-if="result.status === 'ambiguous'" type="warning" title="语义核对" show-icon>
+        {{ result.answer }}
+      </a-alert>
 
-        <a-statistic title="执行逻辑">
-          <span class="text-lg font-bold text-orange-600">
-            {{ result.logic === 'SUM' ? '求和聚合' : '明细列表' }}
-          </span>
-        </a-statistic>
-      </div>
+      <!-- 情况 2：查询成功 -->
+      <template v-if="result.status === 'success'">
+        <div class="flex gap-4">
+          <a-statistic title="执行动作">
+            <span class="text-lg font-bold text-orange-600">
+              {{ result.sql?.includes('SUM') ? '聚合求和' : '明细列表' }}
+            </span>
+          </a-statistic>
+        </div>
 
-      <a-collapse :default-active-key="['sql']">
-        <a-collapse-item header="查看生成的推理 SQL" key="sql">
-          <pre class="bg-gray-800 text-green-400 p-4 rounded-lg text-xs overflow-x-auto">{{ result.sql }}</pre>
-        </a-collapse-item>
-      </a-collapse>
+        <a-collapse>
+          <a-collapse-item header="查看推理 SQL" key="1">
+            <pre class="bg-gray-900 text-green-400 p-4 rounded text-xs">{{ result.sql }}</pre>
+          </a-collapse-item>
+        </a-collapse>
 
-      <div class="bg-white rounded-xl shadow-sm p-4">
-        <a-table :data="result.data" :pagination="{ pageSize: 5 }">
-          <template #columns>
-            <a-table-column v-for="key in Object.keys(result.data[0] || {})" :key="key" :title="key"
-              :data-index="key" />
-          </template>
-        </a-table>
-      </div>
+        <div class="bg-white p-4 rounded shadow-sm">
+          <a-table :data="result.data" :pagination="{ pageSize: 5 }">
+            <template #columns>
+              <a-table-column v-for="k in Object.keys(result.data[0] || {})" :key="k" :title="k" :data-index="k" />
+            </template>
+          </a-table>
+        </div>
+      </template>
+
+      <!-- 情况 3：识别失败 -->
+      <a-empty v-if="result.status === 'fail'" :description="result.answer" />
     </div>
   </div>
 </template>
@@ -53,13 +56,9 @@ const onSearch = async () => {
   loading.value = true;
   try {
     const res = await client.post('/chat', { query: query.value });
-    if (res.data.status === 'success') {
-      result.value = res.data;
-    } else {
-      Message.warning(res.data.answer || '未能匹配到本体节点');
-    }
+    result.value = res.data;
   } catch (e) {
-    Message.error('服务异常');
+    Message.error('语义引擎响应异常');
   } finally {
     loading.value = false;
   }
